@@ -1,0 +1,346 @@
+---
+title: "Assignment_1PM566"
+author: Mona Bandov
+format:
+  html:
+    embed resources: true
+editor: visual
+date: "2023-09-29"
+---
+
+
+## Assignment 1 (Due September 29, 2023 11:59pm)
+
+## 
+
+Loading Libraries and Data:
+
+
+```{r}
+library(readr)
+library(magrittr)
+library(devtools)
+library(leaflet)
+library(knitr)
+library(leaflet)
+library(tidyr)
+library(datasets)
+library(dplyr)
+library(ggplot2)
+
+
+```
+
+```{r}
+
+PM2022 <- read_csv("~/Desktop/PM566/Assigment_1/2022_PM2.5.csv")
+PM2002 <- read_csv("~/Desktop/PM566/Assigment_1/2002_PM2.5.csv")
+```
+
+
+1.  Given the formulated question from the assignment description, you will now conduct EDA Checklist items 2-4. First, download 2002 and 2022 data for all sites in California from the [EPA Air Quality Data website](https://www.epa.gov/outdoor-air-quality-data/download-daily-data). Read in the data using `data.table()`. For each of the two datasets, check the dimensions, headers, footers, variable names and variable types. Check for any data issues, particularly in the key variable we are analyzing. Make sure you write up a summary of all of your findings.
+
+2020 Data Set Exploration:
+
+
+```{r}
+dim(PM2022)
+```
+
+
+There are 57761 rows and 20 columns
+
+
+```{r}
+head(PM2022)
+```
+
+```{r}
+head(PM2022)
+```
+
+```{r}
+colnames(PM2022)
+```
+
+
+We have 20 column names: "Date","Source", "Site ID","POC", "Daily Mean PM2.5 Concentration","UNITS","DAILY_AQI_VALUE","Site Name" ,"DAILY_OBS_COUNT", "PERCENT_COMPLETE", "AQS_PARAMETER_CODE", "AQS_PARAMETER_DESC", "CBSA_CODE", "CBSA_NAME", "STATE_CODE", "STATE", "COUNTY_CODE", "COUNTY", "SITE_LATITUDE", "SITE_LONGITUDE" (Not in this order)
+
+We see that the column names are not in the best form to filter/manipulate the data. I will edit the column names so that it is easier to compute the desired information.
+
+
+```{r}
+summary(PM2022)
+
+```
+
+
+After looking at this, I saw something weird about the data. Daily Mean PM2.5 Concentration's minimum is -2.200. It doesn't make sense that the concentration is less than 0. I will explore this later.
+
+2002 Data Set Exploration:
+
+
+```{r}
+dim(PM2002)
+```
+
+
+There are 15976 rows and 20 columns.
+
+
+```{r}
+head(PM2002)
+```
+
+```{r}
+tail(PM2002)
+```
+
+```{r}
+colnames(PM2002)
+```
+
+
+The column names are the same as 2020 data.
+
+
+```{r}
+summary(PM2002)
+```
+
+
+Unlike 2020 data, there minimum for Daily Mean PM2.5 concentration is 0, but the max is 104.3. The max of the 202 data was 302.500. We may have to look into it.
+
+2.  Combine the two years of data into one data frame. Use the Date variable to create a new column for year, which will serve as an identifier. Change the names of the key variables so that they are easier to refer to in your code.
+
+
+```{r}
+
+bothyears <- rbind(PM2002, PM2022)
+#Separated Dates
+
+bothyears1 <- data.frame(date = bothyears$Date)
+year_dataframe<-separate(bothyears1 , "date", c("Month", "Day", "Year"), sep = "/")
+
+#Combined the data in which the year column has a long name
+semifinal_dataset<-cbind(bothyears,year_dataframe$Year,year_dataframe$Month)
+
+#Change all the column names in the data frame
+
+final_dataset <-semifinal_dataset %>% rename("YEAR"= "year_dataframe$Year","Daily_Mean_PM2.5_Concentration"= "Daily Mean PM2.5 Concentration","Site_Name"= "Site Name" , "Month"= "year_dataframe$Month" )
+head(final_dataset)
+
+```
+
+
+3.  Create a basic map in leaflet() that shows the locations of the sites (make sure to use different colors for each year). Summarize the spatial distribution of the monitoring sites.
+
+
+```{r}
+
+#Color Pallete 
+color_palette <- colorFactor(
+  palette = c( "green", "orange"),  # Specify colors for each year
+  domain = final_dataset$YEAR  # Use the YEAR column from your dataset
+)
+leaflet(final_dataset) %>%
+  addProviderTiles('OpenStreetMap') %>% 
+  addCircles(
+    lat = ~SITE_LATITUDE,
+    lng = ~SITE_LONGITUDE,
+    opacity = 1,
+    fillOpacity = 1,
+    radius = 100,
+    color = ~color_palette(YEAR),  # Color circles based on the YEAR column
+    popup = ~Site_Name  # Display SITE_NAME in the popup
+    )%>%
+  addLegend(
+    pal = color_palette,
+    values = ~YEAR,
+    title = "Year",
+    position = "bottomright")
+```
+
+
+The dots are suppose to represent each (data station) data point, but in the exploratory data analysis, we saw that there was more data 2002 and 2020 data set, but that is not reflective on the map. We would expect more dots for 2022, and even more for 2002.The data is limited to just California.
+
+4.  Check for any missing or implausible values of PM2.5 in the combined dataset. Explore the proportions of each and provide a summary of any temporal patterns you see in these observations.
+
+
+```{r}
+#Finding the missing values: There were no missing vlaues 
+missing_pm <- final_dataset %>%filter(is.na(Daily_Mean_PM2.5_Concentration))
+max(final_dataset$Daily_Mean_PM2.5_Concentration)
+min(final_dataset$Daily_Mean_PM2.5_Concentration)
+#I filted out to see how many negative values there are and other information. 
+negative_PM2.5 <- final_dataset %>%filter(Daily_Mean_PM2.5_Concentration<0)
+dim(negative_PM2.5) #218 values that are less than 0
+head(negative_PM2.5)
+
+# I aggregated county data to find the summary statistic
+final_dataset1 <- final_dataset %>%
+  group_by(COUNTY)%>% summarize(
+    Mean_Variable = mean(Daily_Mean_PM2.5_Concentration),
+    Median_Variable = median(Daily_Mean_PM2.5_Concentration),
+    Min_Var= min(Daily_Mean_PM2.5_Concentration),
+    Max_Var= max(Daily_Mean_PM2.5_Concentration),
+    Count = n()
+  )
+head(final_dataset1)
+#I aggregated  site data to find the summary statistic
+final_dataset2 <- final_dataset %>%
+  group_by(Site_Name)%>% summarize(
+    Mean_Variable = mean(Daily_Mean_PM2.5_Concentration),
+    Median_Variable = median(Daily_Mean_PM2.5_Concentration),
+    Min_Var= min(Daily_Mean_PM2.5_Concentration),
+    Max_Var= max(Daily_Mean_PM2.5_Concentration),
+    Count = n()
+  )
+head(final_dataset2)
+
+```
+
+
+There are no N/A values in Daily Mean PM2.5 Concentration. The minimum is of this column is -2.2 and the maximum is 302.5. Like mentioned before, it is impossible to have a concentration level less than 0. The value 302.5 makes sense; it would be considered hazardous. In this data set, we have to keep acount that 218 rows in the data set that have a Daily Mean PM2.5 Concentration are less than 0. I then computed the mean, median,min, count and max for each county in finaldataset1. In finaldaraset2, I computed the same information except it is for each site in the data set.
+
+5.  Explore the main question of interest at three different spatial levels. Create exploratory plots (e.g. boxplots, histograms, line plots) and summary statistics that best suit each level of data. Be sure to write up explanations of what you observe in these data.
+    -   state
+
+    -   county
+
+    -   site in Los Angeles
+
+STATE ANALYSIS: (Original Data Since I Filtered It
+
+
+```{r}
+
+#Box Plot 
+ggplot(final_dataset, aes(x = YEAR, y =Daily_Mean_PM2.5_Concentration )) +
+  geom_boxplot() +
+  labs(title = "Box Plot of Daily Mean PM2.5 Concentration by Year in California", x = "Year", y = "PM2.5")
+
+#Qunatile Numbers: 
+quantile_data <- final_dataset %>%
+  group_by(YEAR) %>%
+  summarize(
+    Q25 = quantile(Daily_Mean_PM2.5_Concentration, 0.25),
+    Median = quantile(Daily_Mean_PM2.5_Concentration, 0.5),
+    Q75 = quantile(Daily_Mean_PM2.5_Concentration, 0.75))
+
+(quantile_data)
+
+```
+
+
+Here, I created the box and whiskers plot to assess the difference in Daily Mean PM2.5 Concentration between two underlying groups (2002 versus 2022). I then tabled the IQR. I can see there are more outliers in 2022 then there is in 2002. There is more of a spread in 2002 compared to 2022.
+
+
+```{r}
+
+#Histogram of the same data 
+ggplot(final_dataset, aes(x = log(Daily_Mean_PM2.5_Concentration), fill=YEAR)) +
+  geom_histogram(binwidth = 0.50) +
+  labs(title = "Histogram of PM2.5 Values in California by Year",
+       x = "PM2.5",
+       y = "Frequency")
+```
+
+
+In addition to the box and whiskers plot, I made a histogram to show the same information, but in a distribution, I decided to take the log of the x values to transform the data to see the difference in a more digestible way. We can see that the data in 2002 is more spreaded out.
+
+County Data:
+
+
+```{r}
+final_dataset1 <- final_dataset %>%
+  group_by(COUNTY)%>% summarize(
+    Mean_Variable = mean(Daily_Mean_PM2.5_Concentration),
+    Median_Variable = median(Daily_Mean_PM2.5_Concentration),
+    Min_Var= min(Daily_Mean_PM2.5_Concentration),
+    Max_Var= max(Daily_Mean_PM2.5_Concentration),
+    Count = n())
+#dim(final_dataset1)
+head(final_dataset)
+
+# Bar plot for Mean_Variable by COUNTY
+bar_plot <- ggplot(final_dataset1, aes(x = COUNTY, y = Mean_Variable)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "COUNTY", y = "Mean Daily_Mean_PM2.5_Concentration") +
+  ggtitle("Mean Daily PM2.5 Concentration by COUNTY") +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(bar_plot)
+
+```
+
+
+There are 51 counties in this data set, but California actually has 58. In the exploratory data analysis, this information can help with identifying why other counties were not excluded. From the bar plit, we can compare the mean daily PM2.5 concentration in rach county. We can see that the highest concentration amount is Kern and Kinds. We can see the overall trend for each county. However, I do think that there are better wats to visualize it. I think that becuase there are a lot of counties, it can be hard to visualize it. I think a data table with values would be the best way to see which is the highest and which is the lowest.
+
+Los Angeles County Exploration :
+
+
+```{r}
+
+#Los Angeles County 
+los_angeles_dataset <-final_dataset %>% filter(COUNTY == "Los Angeles")
+#unique(los_angeles_dataset[,3])
+
+#By County 
+los_angeles_dataset1 <- los_angeles_dataset %>%
+  group_by(Site_Name)%>% summarize(
+    Mean_Variable = mean(Daily_Mean_PM2.5_Concentration),
+    Median_Variable = median(Daily_Mean_PM2.5_Concentration),
+    Min_Var= min(Daily_Mean_PM2.5_Concentration),
+    Max_Var= max(Daily_Mean_PM2.5_Concentration),
+    Count = n())
+
+head(los_angeles_dataset1)
+
+#By Year
+los_angeles_dataset2 <- los_angeles_dataset %>%
+  group_by(YEAR)%>% summarize(
+    Mean_Variable = mean(Daily_Mean_PM2.5_Concentration),
+    Median_Variable = median(Daily_Mean_PM2.5_Concentration),
+    Min_Var= min(Daily_Mean_PM2.5_Concentration),
+    Max_Var= max(Daily_Mean_PM2.5_Concentration),
+    Count = n()
+  )
+
+head(los_angeles_dataset2)
+head(los_angeles_dataset1)
+
+# Box plot by year
+boxplot(Daily_Mean_PM2.5_Concentration ~ YEAR, data = los_angeles_dataset, 
+        main = "Daily Mean PM2.5 Concentrations in Los Angeles, grouped by year", 
+        xlab = "County", 
+        ylab = "PM2.5 Concentration")
+
+
+# Bar plot for Mean_Variable by Site_Name
+bar_plot <- ggplot(los_angeles_dataset1, aes(x = Site_Name, y = Mean_Variable)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = "Site Name", y = "Mean Daily_Mean_PM2.5_Concentration") +
+  ggtitle("Mean Daily PM2.5 Concentration by Site Name") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(bar_plot)
+
+los_angeles_dataset1
+# Box plot for Daily_Mean_PM2.5_Concentration by Site_Name
+box_plot <- ggplot(los_angeles_dataset1, aes(x = Site_Name, y = Mean_Variable)) +
+  geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+  labs(x = "Site Name", y = "Mean_Variable") +
+  ggtitle("Distribution of Daily PM2.5 Concentration by Site Name") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(box_plot)
+
+
+
+
+```
+
+
+For Los Angeles, I made three different visualizations that give about the same information. We can see from the box in whiskers plots that the mean daily PM2.5 concentration in Los Angeles was higher in 2002 compared to 2022. With this information, we hypothesize why there is a difference between mean values between those two years (i.e Less cars? More electric cars? etc.) We can see that both data contain outliers. We also know that there spread is highers in 2002 (range of values). In the barplots, we can see that NA exists. If I were to data clean even more, I would not include the data where the PM2.5 concentrations are not inputted. We can see that Burbank, Lynwood, and NA (we will not mention this) have the highest mean concentration level of PM2.5. We can see that Lebec has the lowest. The same information can be found in the last plot (with green tics). However, I think the blue box plot is a lot better to read and is more visually pleasing.
+
